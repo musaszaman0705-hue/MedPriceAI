@@ -13,48 +13,35 @@ st.set_page_config(
 # All prices are fictional.
 # ---------------------------------
 
-data = {
-    "medication": [
-        "Metformin", "Metformin", "Metformin",
-        "Amoxicillin", "Amoxicillin", "Amoxicillin",
-        "Atorvastatin", "Atorvastatin", "Atorvastatin",
-        "Lisinopril", "Lisinopril", "Lisinopril",
-        "Sertraline", "Sertraline", "Sertraline"
-    ],
-    "strength": [
-        "500 mg", "500 mg", "500 mg",
-        "500 mg", "500 mg", "500 mg",
-        "20 mg", "20 mg", "20 mg",
-        "10 mg", "10 mg", "10 mg",
-        "50 mg", "50 mg", "50 mg"
-    ],
-    "quantity": [
-        30, 30, 30, 21, 21, 21, 30, 30, 30,
-        30, 30, 30, 30, 30, 30
-    ],
-    "pharmacy": [
-        "Community Pharmacy", "City Pharmacy",
-        "Neighborhood Drugs",
-        "Community Pharmacy", "City Pharmacy",
-        "Neighborhood Drugs",
-        "Community Pharmacy", "City Pharmacy",
-        "Neighborhood Drugs",
-        "Community Pharmacy", "City Pharmacy",
-        "Neighborhood Drugs",
-        "Community Pharmacy", "City Pharmacy",
-        "Neighborhood Drugs"
-    ],
-    "zip_code": ["77002"] * 15,
-    "price": [
-        8.50, 6.25, 7.10,
-        12.00, 9.50, 10.25,
-        11.75, 8.00, 9.25,
-        7.50, 5.99, 6.75,
-        13.50, 10.00, 11.25
-    ]
-}
 
-df = pd.DataFrame(data)
+# Load medication data from the CSV file
+import pandas as pd
+
+df = pd.read_csv(
+    "medications.csv",
+    dtype={"zip_code": str}
+)
+
+# Clean medication data
+df["medication"] = df["medication"].str.strip().str.title()
+df["strength"] = df["strength"].str.strip()
+df["pharmacy"] = df["pharmacy"].str.strip()
+df["zip_code"] = df["zip_code"].str.strip()
+df["price"] = pd.to_numeric(df["price"], errors="coerce")
+
+# Remove incomplete or invalid records
+df = df.dropna(
+    subset=[
+        "medication", "strength", "quantity",
+        "pharmacy", "zip_code", "price"
+    ]
+)
+
+df = df[
+    (df["price"] > 0) &
+    (df["quantity"] > 0)
+].drop_duplicates().reset_index(drop=True)
+
 
 # ---------------------------------
 # Website design
