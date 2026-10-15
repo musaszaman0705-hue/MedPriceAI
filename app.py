@@ -8,126 +8,193 @@ st.set_page_config(
     layout="wide"
 )
 
-NADAC_URL = (
-    "https://download.medicaid.gov/data/"
-    "nadac-national-average-drug-acquisition-cost-09-23-2026.csv"
-)
+# ---------------------------------
+# Demo medication dataset
+# All prices are fictional.
+# ---------------------------------
 
-
-@st.cache_data(ttl=86400)
-def load_nadac_data():
-    columns = [
-        "NDC Description",
-        "NDC",
-        "NADAC Per Unit",
-        "Effective Date",
-        "Pricing Unit",
-        "As of Date"
+data = {
+    "medication": [
+        "Metformin", "Metformin", "Metformin",
+        "Amoxicillin", "Amoxicillin", "Amoxicillin",
+        "Atorvastatin", "Atorvastatin", "Atorvastatin",
+        "Lisinopril", "Lisinopril", "Lisinopril",
+        "Sertraline", "Sertraline", "Sertraline"
+    ],
+    "strength": [
+        "500 mg", "500 mg", "500 mg",
+        "500 mg", "500 mg", "500 mg",
+        "20 mg", "20 mg", "20 mg",
+        "10 mg", "10 mg", "10 mg",
+        "50 mg", "50 mg", "50 mg"
+    ],
+    "quantity": [
+        30, 30, 30, 21, 21, 21, 30, 30, 30,
+        30, 30, 30, 30, 30, 30
+    ],
+    "pharmacy": [
+        "Community Pharmacy", "City Pharmacy",
+        "Neighborhood Drugs",
+        "Community Pharmacy", "City Pharmacy",
+        "Neighborhood Drugs",
+        "Community Pharmacy", "City Pharmacy",
+        "Neighborhood Drugs",
+        "Community Pharmacy", "City Pharmacy",
+        "Neighborhood Drugs",
+        "Community Pharmacy", "City Pharmacy",
+        "Neighborhood Drugs"
+    ],
+    "zip_code": ["77002"] * 15,
+    "price": [
+        8.50, 6.25, 7.10,
+        12.00, 9.50, 10.25,
+        11.75, 8.00, 9.25,
+        7.50, 5.99, 6.75,
+        13.50, 10.00, 11.25
     ]
+}
 
-    df = pd.read_csv(
-        NADAC_URL,
-        usecols=columns,
-        dtype={"NDC": str},
-        low_memory=False
-    )
+df = pd.DataFrame(data)
 
-    # Convert costs and dates into usable formats
-    df["NADAC Per Unit"] = pd.to_numeric(
-        df["NADAC Per Unit"],
-        errors="coerce"
-    )
-
-    df["As of Date"] = pd.to_datetime(
-        df["As of Date"],
-        errors="coerce"
-    )
-
-    df["Effective Date"] = pd.to_datetime(
-        df["Effective Date"],
-        errors="coerce"
-    )
-
-    # Remove incomplete or invalid records
-    df = df.dropna(
-        subset=[
-            "NDC Description",
-            "NADAC Per Unit",
-            "As of Date"
-        ]
-    )
-
-    df = df[df["NADAC Per Unit"] >= 0].copy()
-
-    # Keep only records from the newest available snapshot
-    if not df.empty:
-        latest_date = df["As of Date"].max()
-        df = df[df["As of Date"] == latest_date].copy()
-
-    return df
+# ---------------------------------
+# Website design
+# ---------------------------------
 
 st.title("💊 MedPrice AI")
-st.subheader("Government Drug Cost Explorer")
+st.subheader("Prescription Price Comparison Assistant")
 
-st.info(
-    "This version uses CMS NADAC acquisition-cost data. "
-    "These values are not pharmacy-specific retail prices "
-    "or guaranteed patient costs."
+st.write(
+    "Compare sample prescription prices across pharmacies "
+    "and explore lower-cost options."
 )
 
-try:
-    nadac = load_nadac_data()
+st.warning(
+    "Prototype only: all prices are fictional examples, "
+    "not actual pharmacy quotes. Do not use them to make "
+    "prescription or treatment decisions."
+)
 
-if not nadac.empty:
-    latest_date = nadac["As of Date"].max()
+st.divider()
 
-    st.caption(
-        f"CMS data snapshot: {latest_date:%B %d, %Y}"
+# ---------------------------------
+# Search form
+# ---------------------------------
+
+st.header("Find a Medication")
+
+medication_list = sorted(df["medication"].unique())
+
+with st.form("medication_search"):
+    medication = st.selectbox(
+        "Select medication",
+        medication_list
     )
 
-
-
-    query = st.text_input(
-        "Search for a medication",
-        placeholder="For example, Metformin"
+    zip_code = st.text_input(
+        "ZIP code",
+        value="77002",
+        max_chars=5
     )
 
-    if query.strip():
-        results = nadac[
-            nadac["NDC Description"].str.contains(
-                query.strip(),
-                case=False,
-                na=False,
-                regex=False
-            )
+    available_quantities = sorted(
+        df[df["medication"] == medication]["quantity"].unique()
+    )
+
+    quantity = st.selectbox(
+        "Prescription quantity",
+        available_quantities
+    )
+
+    submitted = st.form_submit_button(
+        "Compare Prices",
+        type="primary"
+    )
+
+# ---------------------------------
+# Results
+# ---------------------------------
+
+if submitted:
+    if not zip_code.isdigit() or len(zip_code) != 5:
+        st.error("Enter a valid five-digit ZIP code.")
+    else:
+        results = df[
+            (df["medication"] == medication) &
+            (df["zip_code"] == zip_code) &
+            (df["quantity"] == quantity)
         ].copy()
 
         if results.empty:
-            st.warning("No matching drug records found.")
+            st.info(
+                "No sample price records were found for this "
+                "medication and ZIP code."
+            )
         else:
-            results = results.sort_values(
-                "Effective Date",
-                ascending=False
+            results = results.sort_values("price")
+
+            st.header("Price Comparison")
+
+            cheapest = results.iloc[0]
+            highest = results["price"].max()
+            difference = highest - cheapest["price"]
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.metric(
+                "Lowest demo price",
+                f"${cheapest['price']:.2f}"
             )
 
-            st.write(f"Matching records: {len(results)}")
+            col2.metric(
+                "Highest demo price",
+                f"${highest:.2f}"
+            )
+
+            col3.metric(
+                "Price difference",
+                f"${difference:.2f}"
+            )
+
+            st.success(
+                f"Lowest listed demo price: "
+                f"{cheapest['pharmacy']}"
+            )
 
             st.dataframe(
-                results.head(100),
+                results[
+                    ["pharmacy", "medication", "strength",
+                     "quantity", "price"]
+                ].rename(
+                    columns={
+                        "pharmacy": "Pharmacy",
+                        "medication": "Medication",
+                        "strength": "Strength",
+                        "quantity": "Quantity",
+                        "price": "Demo Price ($)"
+                    }
+                ),
                 use_container_width=True,
                 hide_index=True
             )
 
-    st.caption(
-        "Source: CMS National Average Drug Acquisition Cost "
-        "(NADAC). Confirm retail prescription prices directly "
-        "with pharmacies."
-    )
+            st.caption(
+                "The price difference is not guaranteed savings. "
+                "Real costs depend on insurance, discounts, "
+                "eligibility, and pharmacy pricing."
+            )
 
-except Exception as error:
-    st.error(
-        "The CMS data could not be loaded. "
-        "Please try again later."
-    )
-    st.caption(f"Technical details: {error}")
+st.divider()
+
+st.subheader("About MedPrice AI")
+
+st.write(
+    "MedPrice AI is a student project prototype designed to "
+    "demonstrate how prescription price comparison can work. "
+    "It does not provide medical advice or live pharmacy prices."
+)
+
+st.caption(
+    "Always confirm prescription prices directly with a pharmacy. "
+    "Never change or stop a medication based on this demo."
+)
 
