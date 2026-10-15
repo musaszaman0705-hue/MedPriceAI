@@ -13,6 +13,7 @@ NADAC_URL = (
     "nadac-national-average-drug-acquisition-cost-09-23-2026.csv"
 )
 
+
 @st.cache_data(ttl=86400)
 def load_nadac_data():
     columns = [
@@ -27,17 +28,41 @@ def load_nadac_data():
     df = pd.read_csv(
         NADAC_URL,
         usecols=columns,
+        dtype={"NDC": str},
         low_memory=False
     )
 
+    # Convert costs and dates into usable formats
     df["NADAC Per Unit"] = pd.to_numeric(
         df["NADAC Per Unit"],
         errors="coerce"
     )
 
-    df = df.dropna(
-        subset=["NDC Description", "NADAC Per Unit"]
+    df["As of Date"] = pd.to_datetime(
+        df["As of Date"],
+        errors="coerce"
     )
+
+    df["Effective Date"] = pd.to_datetime(
+        df["Effective Date"],
+        errors="coerce"
+    )
+
+    # Remove incomplete or invalid records
+    df = df.dropna(
+        subset=[
+            "NDC Description",
+            "NADAC Per Unit",
+            "As of Date"
+        ]
+    )
+
+    df = df[df["NADAC Per Unit"] >= 0].copy()
+
+    # Keep only records from the newest available snapshot
+    if not df.empty:
+        latest_date = df["As of Date"].max()
+        df = df[df["As of Date"] == latest_date].copy()
 
     return df
 
@@ -52,6 +77,15 @@ st.info(
 
 try:
     nadac = load_nadac_data()
+
+if not nadac.empty:
+    latest_date = nadac["As of Date"].max()
+
+    st.caption(
+        f"CMS data snapshot: {latest_date:%B %d, %Y}"
+    )
+
+
 
     query = st.text_input(
         "Search for a medication",
